@@ -9,7 +9,8 @@ D3D12ProgramBase::D3D12ProgramBase(D3D12Core *core) : core_(core) {
 
 void D3D12ProgramBase::AddResourceBindingImpl(ResourceType type, int count) {
   CD3DX12_DESCRIPTOR_RANGE1 range;
-  range.Init(ResourceTypeToD3D12DescriptorRangeType(type), count, 0, descriptor_ranges_.size());
+  range.Init(ResourceTypeToD3D12DescriptorRangeType(type), count, 0, descriptor_ranges_.size(),
+             D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE);
   descriptor_ranges_.push_back(range);
 }
 

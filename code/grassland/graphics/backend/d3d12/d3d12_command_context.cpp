@@ -266,7 +266,7 @@ CD3DX12_GPU_DESCRIPTOR_HANDLE D3D12CommandContext::WriteUAVDescriptor(D3D12Image
 
 CD3DX12_GPU_DESCRIPTOR_HANDLE D3D12CommandContext::WriteSRVDescriptor(D3D12Image *image) {
   D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
-  desc.Format = ImageFormatToDXGIFormat(image->Format());
+  desc.Format = image ? ImageFormatToDXGIFormat(image->Format()) : DXGI_FORMAT_B8G8R8A8_UNORM;
   if (desc.Format == DXGI_FORMAT_D32_FLOAT) {
     desc.Format = DXGI_FORMAT_R32_FLOAT;
   }
@@ -277,7 +277,7 @@ CD3DX12_GPU_DESCRIPTOR_HANDLE D3D12CommandContext::WriteSRVDescriptor(D3D12Image
   desc.Texture2D.PlaneSlice = 0;
   desc.Texture2D.ResourceMinLODClamp = 0.0f;
 
-  core_->Device()->Handle()->CreateShaderResourceView(image->Image()->Handle(), &desc, resource_descriptor_base_);
+  core_->Device()->Handle()->CreateShaderResourceView(image ? image->Image()->Handle() :nullptr, &desc, resource_descriptor_base_);
 
   resource_descriptor_base_.Offset(resource_descriptor_size_);
   auto result = resource_descriptor_gpu_base_;
@@ -295,7 +295,7 @@ CD3DX12_GPU_DESCRIPTOR_HANDLE D3D12CommandContext::WriteSRVDescriptor(D3D12Buffe
   desc.Buffer.NumElements = static_cast<UINT>(buffer.size) >> 2;
   desc.Buffer.StructureByteStride = 0;
 
-  core_->Device()->Handle()->CreateShaderResourceView(buffer.buffer->Buffer()->Handle(), &desc,
+  core_->Device()->Handle()->CreateShaderResourceView(buffer.buffer? buffer.buffer->Buffer()->Handle() :nullptr, &desc,
                                                       resource_descriptor_base_);
 
   resource_descriptor_base_.Offset(resource_descriptor_size_);

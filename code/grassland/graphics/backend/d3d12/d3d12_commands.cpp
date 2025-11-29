@@ -98,7 +98,8 @@ void D3D12CmdBindResourceBuffers::CompileCommand(D3D12CommandContext *context,
         if (i == 0) {
           first_descriptor = desc;
         }
-        context->RequireResourceState(command_list, buffers_[i].buffer->Buffer()->Handle(),
+        if (buffers_[i].buffer)
+          context->RequireResourceState(command_list, buffers_[i].buffer->Buffer()->Handle(),
                                       D3D12_RESOURCE_STATE_GENERIC_READ);
       }
       break;
@@ -108,7 +109,8 @@ void D3D12CmdBindResourceBuffers::CompileCommand(D3D12CommandContext *context,
         if (i == 0) {
           first_descriptor = desc;
         }
-        context->RequireResourceState(command_list, buffers_[i].buffer->Buffer()->Handle(),
+        if (buffers_[i].buffer)
+          context->RequireResourceState(command_list, buffers_[i].buffer->Buffer()->Handle(),
                                       D3D12_RESOURCE_STATE_GENERIC_READ);
       }
       break;
@@ -118,7 +120,8 @@ void D3D12CmdBindResourceBuffers::CompileCommand(D3D12CommandContext *context,
         if (i == 0) {
           first_descriptor = desc;
         }
-        context->RequireResourceState(command_list, buffers_[i].buffer->Buffer()->Handle(),
+        if (buffers_[i].buffer)
+          context->RequireResourceState(command_list, buffers_[i].buffer->Buffer()->Handle(),
                                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
       }
       break;
@@ -152,7 +155,8 @@ void D3D12CmdBindResourceImages::CompileCommand(D3D12CommandContext *context, ID
         if (i == 0) {
           first_descriptor = desc;
         }
-        context->RequireResourceState(command_list, images_[i]->Image()->Handle(), D3D12_RESOURCE_STATE_GENERIC_READ);
+        if (images_[i])
+          context->RequireResourceState(command_list, images_[i]->Image()->Handle(), D3D12_RESOURCE_STATE_GENERIC_READ);
       }
       break;
     case D3D12_DESCRIPTOR_RANGE_TYPE_UAV:
@@ -161,7 +165,8 @@ void D3D12CmdBindResourceImages::CompileCommand(D3D12CommandContext *context, ID
         if (i == 0) {
           first_descriptor = desc;
         }
-        context->RequireResourceState(command_list, images_[i]->Image()->Handle(),
+        if (images_[i])
+          context->RequireResourceState(command_list, images_[i]->Image()->Handle(),
                                       D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
       }
       break;
@@ -189,7 +194,17 @@ void D3D12CmdBindResourceSamplers::CompileCommand(D3D12CommandContext *context,
   CD3DX12_GPU_DESCRIPTOR_HANDLE first_descriptor;
   first_descriptor.ptr = 0;
   for (size_t i = 0; i < samplers_.size(); ++i) {
-    auto desc = context->WriteSamplerDescriptor(samplers_[i]->SamplerDesc());
+    auto desc = context->WriteSamplerDescriptor(samplers_[i] ? samplers_[i]->SamplerDesc()
+                                                             : D3D12_SAMPLER_DESC{D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+                                                                                  D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+                                                                                  D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+                                                                                  D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+                                                                                  0.0f,
+                                                                                  0,
+                                                                                  D3D12_COMPARISON_FUNC_ALWAYS,
+                                                                                  {0.0f, 0.0f, 0.0f, 0.0f},
+                                                                                  0.0f,
+                                                                                  D3D12_FLOAT32_MAX});
     if (i == 0) {
       first_descriptor = desc;
     }
