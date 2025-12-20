@@ -155,11 +155,12 @@ HRESULT Device::CreateImage(const D3D12_RESOURCE_DESC &desc, double_ptr<Image> p
 
 HRESULT Device::CreateImage(size_t width,
                             size_t height,
+                            size_t mip,
                             DXGI_FORMAT format,
                             D3D12_RESOURCE_FLAGS flags,
                             double_ptr<Image> pp_image) {
   CD3DX12_RESOURCE_DESC desc =
-      CD3DX12_RESOURCE_DESC::Tex2D(format, width, height, 1, 1, 1, 0, flags, D3D12_TEXTURE_LAYOUT_UNKNOWN, 0);
+      CD3DX12_RESOURCE_DESC::Tex2D(format, width, height, 1, mip, 1, 0, flags, D3D12_TEXTURE_LAYOUT_UNKNOWN, 0);
   return CreateImage(desc, pp_image);
 }
 
@@ -170,7 +171,16 @@ HRESULT Device::CreateImage(size_t width, size_t height, DXGI_FORMAT format, dou
   } else {
     flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
   }
-  return CreateImage(width, height, format, flags, pp_image);
+  return CreateImage(width, height, 1,  format, flags, pp_image);
+}
+HRESULT Device::CreateImageMip(size_t width, size_t height, size_t mip, DXGI_FORMAT format, double_ptr<Image> pp_image) {
+  D3D12_RESOURCE_FLAGS flags{};
+  if (IsDepthFormat(format)) {
+    flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+  } else {
+    flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+  }
+  return CreateImage(width, height, mip, format, flags, pp_image);
 }
 
 HRESULT Device::CreateImageF32(size_t width, size_t height, double_ptr<Image> pp_image) {

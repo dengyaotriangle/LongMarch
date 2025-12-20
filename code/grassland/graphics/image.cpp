@@ -64,12 +64,16 @@ void Image::PybindClassRegistration(py::classh<Image> &c) {
   });
 }
 
-int LoadImageFromFile(Core *core, const std::string &file_path, double_ptr<Image> pp_image) {
+int LoadImageFromFile(Core *core, const std::string &file_path, double_ptr<Image> pp_image, bool create_mip) {
   int w, h, c;
   {
     auto data = stbi_load(file_path.c_str(), &w, &h, &c, 4);
     if (data) {
-      core->CreateImage(w, h, IMAGE_FORMAT_R8G8B8A8_UNORM, pp_image);
+      if (create_mip) {
+        core->CreateImageMip(w, h, IMAGE_FORMAT_R8G8B8A8_UNORM, pp_image);
+      } else {
+        core->CreateImage(w, h, IMAGE_FORMAT_R8G8B8A8_UNORM, pp_image);
+      }
       pp_image->UploadData(data);
       stbi_image_free(data);
       return 0;
@@ -78,7 +82,11 @@ int LoadImageFromFile(Core *core, const std::string &file_path, double_ptr<Image
   {
     auto data = stbi_loadf(file_path.c_str(), &w, &h, &c, 4);
     if (data) {
-      core->CreateImage(w, h, IMAGE_FORMAT_R32G32B32A32_SFLOAT, pp_image);
+      if (create_mip) {
+        core->CreateImageMip(w, h, IMAGE_FORMAT_R32G32B32A32_SFLOAT, pp_image);
+      } else {
+        core->CreateImage(w, h, IMAGE_FORMAT_R32G32B32A32_SFLOAT, pp_image);
+      }
       pp_image->UploadData(data);
       stbi_image_free(data);
       return 0;

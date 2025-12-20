@@ -68,11 +68,14 @@ class Device {
  public:
   HRESULT CreateImage(size_t width,
                       size_t height,
+                      size_t mip,
                       DXGI_FORMAT format,
                       D3D12_RESOURCE_FLAGS flags,
                       double_ptr<Image> pp_image);
 
   HRESULT CreateImage(size_t width, size_t height, DXGI_FORMAT format, double_ptr<Image> pp_image);
+
+  HRESULT CreateImageMip(size_t width, size_t height, size_t mip, DXGI_FORMAT format, double_ptr<Image> pp_image);
 
   HRESULT CreateImageF32(size_t width, size_t height, double_ptr<Image> pp_image);
 

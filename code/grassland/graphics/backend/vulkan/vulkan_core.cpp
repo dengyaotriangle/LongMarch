@@ -75,6 +75,9 @@ int VulkanCore::CreateImage(int width, int height, ImageFormat format, double_pt
   });
   return 0;
 }
+int VulkanCore::CreateImageMip(int width, int height, ImageFormat format, double_ptr<Image> pp_image) {
+  return CreateImage(width, height, format, pp_image);
+}
 
 int VulkanCore::CreateSampler(const SamplerInfo &info, double_ptr<Sampler> pp_sampler) {
   pp_sampler.construct<VulkanSampler>(this, info);

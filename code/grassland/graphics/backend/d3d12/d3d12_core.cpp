@@ -91,6 +91,11 @@ int D3D12Core::CreateImage(int width, int height, ImageFormat format, double_ptr
   return 0;
 }
 
+int D3D12Core::CreateImageMip(int width, int height, ImageFormat format, double_ptr<Image> pp_image) {
+  pp_image.construct<D3D12Image>(this, width, height, format, true);
+  return 0;
+}
+
 int D3D12Core::CreateSampler(const SamplerInfo &info, double_ptr<Sampler> pp_sampler) {
   pp_sampler.construct<D3D12Sampler>(this, info);
   return 0;

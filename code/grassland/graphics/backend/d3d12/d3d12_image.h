@@ -6,20 +6,23 @@ namespace grassland::graphics::backend {
 
 class D3D12Image : public Image {
  public:
-  D3D12Image(D3D12Core *core, int width, int height, ImageFormat format);
+  D3D12Image(D3D12Core *core, int width, int height, ImageFormat format, bool mip = false);
   Extent2D Extent() const override;
   ImageFormat Format() const override;
   void UploadData(const void *data) const override;
   void DownloadData(void *data) const override;
   void UploadData(const void *data, const Offset2D &offset, const Extent2D &extent) const override;
   void DownloadData(void *data, const Offset2D &offset, const Extent2D &extent) const override;
-
+  int GetMip() const {
+    return mip_;
+  }
   d3d12::Image *Image() const;
 
  private:
   D3D12Core *core_;
   std::unique_ptr<d3d12::Image> image_;
   ImageFormat format_;
+  int mip_;
 };
 
 }  // namespace grassland::graphics::backend

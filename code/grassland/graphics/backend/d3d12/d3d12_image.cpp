@@ -2,8 +2,12 @@
 
 namespace grassland::graphics::backend {
 
-D3D12Image::D3D12Image(D3D12Core *core, int width, int height, ImageFormat format) : core_(core), format_(format) {
-  core_->Device()->CreateImage(width, height, ImageFormatToDXGIFormat(format), &image_);
+D3D12Image::D3D12Image(D3D12Core *core, int width, int height, ImageFormat format,bool mip) : core_(core), format_(format) {
+  mip_ = 1;
+  if (mip) {
+    mip_ = std::log2(width > height ? width : height) + 1;
+  }
+  core_->Device()->CreateImageMip(width, height, mip_, ImageFormatToDXGIFormat(format), &image_);
 }
 
 Extent2D D3D12Image::Extent() const {
@@ -16,27 +20,117 @@ Extent2D D3D12Image::Extent() const {
 ImageFormat D3D12Image::Format() const {
   return format_;
 }
-
 void D3D12Image::UploadData(const void *data) const {
   auto pixel_size = PixelSize(format_);
   const UINT64 upload_buffer_size = GetRequiredIntermediateSize(image_->Handle(), 0, 1);
   std::unique_ptr<d3d12::Buffer> upload_buffer;
   core_->Device()->CreateBuffer(upload_buffer_size, D3D12_HEAP_TYPE_UPLOAD, &upload_buffer);
+
   D3D12_SUBRESOURCE_DATA subresource_data{};
   subresource_data.pData = data;
   subresource_data.RowPitch = image_->Width() * pixel_size;
   subresource_data.SlicePitch = subresource_data.RowPitch * image_->Height();
 
-  core_->SingleTimeCommand([&](ID3D12GraphicsCommandList *command_list) {
-    CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(
-        image_->Handle(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_COPY_DEST);
-    command_list->ResourceBarrier(1, &barrier);
+  core_->SingleTimeCommand([&, upload_buffer = upload_buffer.get()](ID3D12GraphicsCommandList *command_list) {
+    CD3DX12_RESOURCE_BARRIER to_copy = CD3DX12_RESOURCE_BARRIER::Transition(
+        image_->Handle(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_COPY_DEST, 0);
+    command_list->ResourceBarrier(1, &to_copy);
+
     UpdateSubresources(command_list, image_->Handle(), upload_buffer->Handle(), 0, 0, 1, &subresource_data);
-    barrier = CD3DX12_RESOURCE_BARRIER::Transition(image_->Handle(), D3D12_RESOURCE_STATE_COPY_DEST,
-                                                   D3D12_RESOURCE_STATE_GENERIC_READ);
-    command_list->ResourceBarrier(1, &barrier);
+
+    CD3DX12_RESOURCE_BARRIER to_read = CD3DX12_RESOURCE_BARRIER::Transition(
+        image_->Handle(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ, 0);
+    command_list->ResourceBarrier(1, &to_read);
   });
+
+  auto desc = image_->Handle()->GetDesc();
+  UINT mip_levels = desc.MipLevels;
+  if (mip_levels <= 1) {
+    return;
+  }
+
+  ID3D12Device *device = core_->Device()->Handle();
+  auto blit_pipeline = core_->BlitPipeline();
+
+  for (UINT mip = 1; mip < mip_levels; ++mip) {
+    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srv_heap;
+    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtv_heap;
+
+    {
+      D3D12_DESCRIPTOR_HEAP_DESC srv_heap_desc{};
+      srv_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+      srv_heap_desc.NumDescriptors = 1;
+      srv_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+      d3d12::ThrowIfFailed(device->CreateDescriptorHeap(&srv_heap_desc, IID_PPV_ARGS(&srv_heap)),
+                           "Failed to create SRV heap for mip generation.");
+    }
+
+    {
+      D3D12_DESCRIPTOR_HEAP_DESC rtv_heap_desc{};
+      rtv_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+      rtv_heap_desc.NumDescriptors = 1;
+      rtv_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+      d3d12::ThrowIfFailed(device->CreateDescriptorHeap(&rtv_heap_desc, IID_PPV_ARGS(&rtv_heap)),
+                           "Failed to create RTV heap for mip generation.");
+    }
+
+    core_->SingleTimeCommand([&, srv_heap, rtv_heap, desc, mip](ID3D12GraphicsCommandList *command_list) { // Use blit shader pipline to downsample from previous level...
+      ID3D12Device *device_local = core_->Device()->Handle();
+
+      D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc{};
+      srv_desc.Format = desc.Format;
+      if (srv_desc.Format == DXGI_FORMAT_D32_FLOAT) {
+        srv_desc.Format = DXGI_FORMAT_R32_FLOAT;
+      }
+      srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+      srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+      srv_desc.Texture2D.MostDetailedMip = mip - 1;
+      srv_desc.Texture2D.MipLevels = 1; 
+      srv_desc.Texture2D.PlaneSlice = 0;
+      srv_desc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+      device_local->CreateShaderResourceView(image_->Handle(), &srv_desc,
+                                             srv_heap->GetCPUDescriptorHandleForHeapStart());
+
+      D3D12_RENDER_TARGET_VIEW_DESC rtv_desc{};
+      rtv_desc.Format = desc.Format;
+      rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+      rtv_desc.Texture2D.MipSlice = mip;
+      rtv_desc.Texture2D.PlaneSlice = 0;
+
+      auto rtv_handle = rtv_heap->GetCPUDescriptorHandleForHeapStart();
+      device_local->CreateRenderTargetView(image_->Handle(), &rtv_desc, rtv_handle);
+
+      CD3DX12_RESOURCE_BARRIER to_rtv = CD3DX12_RESOURCE_BARRIER::Transition(
+          image_->Handle(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET, mip);
+      command_list->ResourceBarrier(1, &to_rtv);
+
+      ID3D12DescriptorHeap *heaps[] = {srv_heap.Get()};
+      command_list->SetDescriptorHeaps(1, heaps);
+      command_list->SetGraphicsRootSignature(blit_pipeline->root_signature->Handle());
+      command_list->SetPipelineState(blit_pipeline->GetPipelineState(desc.Format)->Handle());
+      command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+      float width = static_cast<float>(std::max<UINT64>(1, desc.Width >> mip));
+      float height = static_cast<float>(std::max<UINT>(1, desc.Height >> mip));
+      D3D12_VIEWPORT viewport{0.0f, 0.0f, width, height, 0.0f, 1.0f};
+      D3D12_RECT scissor{0, 0, static_cast<LONG>(width), static_cast<LONG>(height)};
+      command_list->RSSetViewports(1, &viewport);
+      command_list->RSSetScissorRects(1, &scissor);
+
+      command_list->OMSetRenderTargets(1, &rtv_handle, FALSE, nullptr);
+      auto srv_gpu_handle = srv_heap->GetGPUDescriptorHandleForHeapStart();
+      command_list->SetGraphicsRootDescriptorTable(0, srv_gpu_handle);
+
+      command_list->DrawInstanced(6, 1, 0, 0);
+
+      CD3DX12_RESOURCE_BARRIER to_read = CD3DX12_RESOURCE_BARRIER::Transition(
+          image_->Handle(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ, mip);
+      command_list->ResourceBarrier(1, &to_read);
+    });
+  }
 }
+
 
 void D3D12Image::DownloadData(void *data) const {
   auto pixel_size = PixelSize(format_);

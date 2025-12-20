@@ -18,6 +18,6 @@ class Image {
   static void PybindClassRegistration(py::classh<Image> &c);
 };
 
-int LoadImageFromFile(Core *core, const std::string &file_path, double_ptr<Image> pp_image);
+int LoadImageFromFile(Core *core, const std::string &file_path, double_ptr<Image> pp_image, bool create_mip = false);
 
 }  // namespace grassland::graphics

@@ -22,6 +22,8 @@ class VulkanCore : public Core {
 
   int CreateImage(int width, int height, ImageFormat format, double_ptr<Image> pp_image) override;
 
+  int CreateImageMip(int width, int height, ImageFormat format, double_ptr<Image> pp_image) override;
+
   int CreateSampler(const SamplerInfo &info, double_ptr<Sampler> pp_sampler) override;
 
   int CreateWindowObject(int width,
